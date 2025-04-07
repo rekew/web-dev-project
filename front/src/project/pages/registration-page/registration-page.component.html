@@ -4,17 +4,17 @@
     <form #regForm="ngForm" (ngSubmit)="onSubmit(regForm)">
       <input
         type="text"
-        name="name"
-        placeholder="Имя"
-        [(ngModel)]="name"
+        name="username"
+        placeholder="Имя пользователя"
+        [(ngModel)]="username"
         required
-        #nameRef="ngModel"
+        #usernameRef="ngModel"
       />
       <div
-        *ngIf="nameRef.invalid && (nameRef.touched || submitted)"
+        *ngIf="usernameRef.invalid && (usernameRef.touched || submitted)"
         class="error"
       >
-        Имя обязательно
+        Имя пользователя обязательно
       </div>
 
       <input
@@ -71,6 +71,8 @@
     </form>
 
     <div class="divider">или</div>
-    <button class="secondary-button">Уже есть аккаунт? Войти</button>
+    <button (click)="goToLogin()" class="secondary-button">
+      Уже есть аккаунт? Войти
+    </button>
   </div>
 </div>
