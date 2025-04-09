@@ -5,12 +5,21 @@ import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 
+interface User {
+  id: number;
+  username: string;
+  email: string;
+  bio: string;
+  avatar: string | null;
+  is_online: boolean;
+}
+
 @Component({
   selector: 'app-settings',
   standalone: true,
   imports: [FormsModule, RouterModule, CommonModule],
   templateUrl: './settings.component.html',
-  styleUrl: './settings.component.css',
+  styleUrls: ['./settings.component.css'],
 })
 export class SettingsComponent implements OnInit {
   constructor(
@@ -19,7 +28,7 @@ export class SettingsComponent implements OnInit {
     private http: HttpClient
   ) {}
 
-  user = {
+  user: User = {
     id: 0,
     username: '',
     email: '',
@@ -27,6 +36,9 @@ export class SettingsComponent implements OnInit {
     avatar: null,
     is_online: false,
   };
+
+  selectedAvatarFile: File | null = null;
+  avatarPreview: string | null = null;
 
   isLoading: boolean = false;
   errorMessage: string = '';
@@ -44,67 +56,139 @@ export class SettingsComponent implements OnInit {
   }
 
   loadUserProfile(): void {
-    const userData = localStorage.getItem('user_data');
-    if (userData) {
-      try {
-        const parsedUser = JSON.parse(userData);
-        this.user = {
-          ...this.user,
-          ...parsedUser,
-        };
-      } catch (e) {
-        console.error('Failed to parse user data from localStorage', e);
-        this.errorMessage = 'Ошибка загрузки профиля пользователя.';
-      }
-    } else {
-      this.errorMessage = 'Нет данных пользователя в localStorage.';
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+      this.router.navigate(['/login']);
+      return;
+    }
+
+    const headers = new HttpHeaders({
+      Authorization: `Bearer ${token}`,
+    });
+
+    this.http
+      .get<User>('http://127.0.0.1:8000/api/users/me/', { headers })
+      .subscribe({
+        next: (data) => {
+          if (data) {
+            this.user = data;
+            // Ensure the avatar URL is correctly processed
+            if (this.user.avatar && !this.user.avatar.startsWith('http')) {
+              this.user.avatar = 'http://127.0.0.1:8000' + this.user.avatar;
+              console.log('the avatar is : ' + this.user.avatar);
+            }
+            console.log('User profile loaded with avatar:', data);
+          }
+        },
+        error: (err) => {
+          console.error('Error loading user profile:', err);
+          this.errorMessage = 'Failed to load user profile';
+        },
+      });
+  }
+
+  onFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+      this.selectedAvatarFile = input.files[0];
+
+      // Create a preview URL for immediate display
+      const reader = new FileReader();
+      reader.onload = (e: any) => {
+        this.avatarPreview = e.target.result;
+      };
+      reader.readAsDataURL(this.selectedAvatarFile);
     }
   }
 
   updateProfile(): void {
     const token = localStorage.getItem('access_token');
-    const userData = localStorage.getItem('user_data');
-
-    if (!userData || !token) {
-      console.error('Missing user data or token.');
+    if (!token) {
+      this.errorMessage = 'Missing access token';
       return;
     }
 
-    const parsedUser = JSON.parse(userData);
-    const userId = parsedUser.id;
-
     const headers = new HttpHeaders({
       Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
     });
 
-    const updatePayload = {
-      username: this.user.username,
-      email: this.user.email,
-      bio: this.user.bio,
-      is_online: this.user.is_online,
-    };
+    const formData = new FormData();
+    formData.append('username', this.user.username);
+    formData.append('email', this.user.email);
+    formData.append('bio', this.user.bio);
+    formData.append('is_online', String(this.user.is_online));
+
+    if (this.selectedAvatarFile) {
+      formData.append('avatar', this.selectedAvatarFile);
+    }
 
     this.isLoading = true;
+    this.errorMessage = '';
+    this.successMessage = '';
+
+    // Log the form data to make sure everything is being sent correctly
+    console.log('Sending data to the backend:', formData);
 
     this.http
-      .put(`http://127.0.0.1:8000/api/users/${userId}/`, updatePayload, {
+      .put<User>(`http://127.0.0.1:8000/api/users/${this.user.id}/`, formData, {
         headers,
       })
       .subscribe({
-        next: (res: any) => {
-          this.successMessage = 'Profile updated successfully.';
+        next: (updatedUser) => {
+          // Log the response from the backend to inspect the updated user data
+          console.log('Backend response:', updatedUser);
 
-          localStorage.setItem('user_data', JSON.stringify(res));
-          this.user = { ...res };
-
+          // Here, we are assuming that the backend returns the full URL for the avatar
+          this.successMessage = 'Profile updated successfully';
+          this.user = updatedUser; // The updated user will have the correct avatar URL
+          this.selectedAvatarFile = null;
+          this.avatarPreview = null;
           this.isLoading = false;
-
-          window.location.reload();
+          this.loadUserProfile(); // Load the user profile to get the updated avatar
         },
         error: (err) => {
-          this.errorMessage = 'Failed to update profile.';
-          console.error(err);
+          this.errorMessage = 'Failed to update profile';
+          console.error('Error updating profile:', err);
+          this.isLoading = false;
+        },
+      });
+  }
+
+  deleteAccount(): void {
+    if (
+      !confirm(
+        'Are you sure you want to delete your account? This action cannot be undone.'
+      )
+    ) {
+      return;
+    }
+
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+      this.errorMessage = 'Missing access token';
+      return;
+    }
+
+    const headers = new HttpHeaders({
+      Authorization: `Bearer ${token}`,
+    });
+
+    this.isLoading = true;
+    this.errorMessage = '';
+
+    this.http
+      .delete(`http://127.0.0.1:8000/api/users/${this.user.id}/`, { headers })
+      .subscribe({
+        next: () => {
+          this.successMessage = 'Account deleted successfully';
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+          this.isLoading = false;
+          this.router.navigate(['/login']);
+        },
+        error: (err) => {
+          this.errorMessage = 'Failed to delete account';
+          console.error('Error deleting account:', err);
           this.isLoading = false;
         },
       });
@@ -113,46 +197,6 @@ export class SettingsComponent implements OnInit {
   logOut(): void {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
-    window.location.reload();
-  }
-
-  onFileSelected(event: Event): void {}
-
-  deleteAccount(): void {
-    const token = localStorage.getItem('access_token');
-    const userData = localStorage.getItem('user_data');
-
-    if (!token || !userData) {
-      console.error('Missing token or user data');
-      return;
-    }
-
-    const parsedUser = JSON.parse(userData);
-    const userId = parsedUser.id;
-
-    const headers = new HttpHeaders({
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    });
-
-    this.isLoading = true;
-
-    this.http
-      .delete(`http://127.0.0.1:8000/api/users/${userId}/`, { headers })
-      .subscribe({
-        next: () => {
-          this.successMessage = 'User deleted successfully.';
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('user_data');
-
-          this.isLoading = false;
-          this.router.navigate(['/login']);
-        },
-        error: (err) => {
-          this.errorMessage = 'Failed to delete user.';
-          console.error(err);
-          this.isLoading = false;
-        },
-      });
+    this.router.navigate(['/login']);
   }
 }

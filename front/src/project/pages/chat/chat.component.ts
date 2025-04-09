@@ -1,10 +1,5 @@
-import { Component, OnInit, Inject, PLATFORM_ID } from '@angular/core';
-import { isPlatformBrowser } from '@angular/common';
-import {
-  HttpClient,
-  HttpClientModule,
-  HttpHeaders,
-} from '@angular/common/http';
+import { Component, Inject, PLATFORM_ID } from '@angular/core';
+import { HttpClient, HttpClientModule } from '@angular/common/http';
 import { Router, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 
@@ -15,7 +10,7 @@ import { FormsModule } from '@angular/forms';
   styleUrl: './chat.component.css',
   standalone: true,
 })
-export class ChatComponent implements OnInit {
+export class ChatComponent {
   searchChat: string = '';
   isSidebarOpen = false;
   userData: any = null;
@@ -25,38 +20,6 @@ export class ChatComponent implements OnInit {
     private router: Router,
     private http: HttpClient
   ) {}
-
-  ngOnInit(): void {
-    if (isPlatformBrowser(this.platformId)) {
-      const token = localStorage.getItem('access_token');
-      if (!token) {
-        this.router.navigate(['/login']);
-      } else {
-        const headers = new HttpHeaders({
-          Authorization: `Bearer ${token}`,
-        });
-
-        this.http
-          .get('http://localhost:8000/api/users/me/', {
-            headers,
-            observe: 'response',
-          })
-          .subscribe({
-            next: (res) => {
-              console.log('Response headers:', res.headers);
-              console.log('Body:', res.body);
-              const userData: any = res.body;
-              if (userData) {
-                localStorage.setItem('user_data', JSON.stringify(userData));
-              }
-            },
-            error: (err) => {
-              console.error('Ошибка при получении данных пользователя', err);
-            },
-          });
-      }
-    }
-  }
 
   filteredGroups() {}
 

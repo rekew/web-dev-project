@@ -9,25 +9,23 @@
       <h2>Profile Settings</h2>
 
       <div class="avatar-section">
-        <div class="avatar-container">
+        <label class="avatar-container">
           <img
-            [src]="user.avatar || 'assets/default-avatar.png'"
+            [src]="user.avatar ? user.avatar : 'assets/default-avatar.png'"
             alt="Profile picture"
             class="avatar-image"
           />
+
           <div class="avatar-overlay">
-            <label for="avatar-upload" class="upload-label">
-              <i class="fas fa-camera"></i>
-            </label>
-            <input
-              type="file"
-              id="avatar-upload"
-              (change)="onFileSelected($event)"
-              accept="image/*"
-              class="hidden"
-            />
+            <i class="fas fa-camera upload-label"></i>
           </div>
-        </div>
+          <input
+            type="file"
+            (change)="onFileSelected($event)"
+            accept="image/*"
+            class="hidden"
+          />
+        </label>
       </div>
 
       <form
