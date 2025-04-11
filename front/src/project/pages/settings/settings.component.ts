@@ -87,17 +87,15 @@ export class SettingsComponent implements OnInit {
       });
   }
 
-  onFileSelected(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    if (input.files && input.files.length > 0) {
-      this.selectedAvatarFile = input.files[0];
-
-      // Create a preview URL for immediate display
+  onFileSelected(event: any): void {
+    const file = event.target.files[0];
+    if (file) {
+      this.selectedAvatarFile = file;
       const reader = new FileReader();
       reader.onload = (e: any) => {
         this.avatarPreview = e.target.result;
       };
-      reader.readAsDataURL(this.selectedAvatarFile);
+      reader.readAsDataURL(file);
     }
   }
 
@@ -118,6 +116,7 @@ export class SettingsComponent implements OnInit {
     formData.append('bio', this.user.bio);
     formData.append('is_online', String(this.user.is_online));
 
+    // If there's a selected avatar, append it to formData
     if (this.selectedAvatarFile) {
       formData.append('avatar', this.selectedAvatarFile);
     }
@@ -126,7 +125,6 @@ export class SettingsComponent implements OnInit {
     this.errorMessage = '';
     this.successMessage = '';
 
-    // Log the form data to make sure everything is being sent correctly
     console.log('Sending data to the backend:', formData);
 
     this.http
@@ -138,7 +136,6 @@ export class SettingsComponent implements OnInit {
           // Log the response from the backend to inspect the updated user data
           console.log('Backend response:', updatedUser);
 
-          // Here, we are assuming that the backend returns the full URL for the avatar
           this.successMessage = 'Profile updated successfully';
           this.user = updatedUser; // The updated user will have the correct avatar URL
           this.selectedAvatarFile = null;

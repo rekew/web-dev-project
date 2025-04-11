@@ -11,11 +11,10 @@
       <div class="avatar-section">
         <label class="avatar-container">
           <img
-            [src]="user.avatar ? user.avatar : 'assets/default-avatar.png'"
+            [src]="avatarPreview || user.avatar || 'assets/default-avatar.png'"
             alt="Profile picture"
             class="avatar-image"
           />
-
           <div class="avatar-overlay">
             <i class="fas fa-camera upload-label"></i>
           </div>
