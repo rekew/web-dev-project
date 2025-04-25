@@ -33,8 +33,15 @@ export class LoginPageComponent {
             this.router.navigate(['/chat']);
           },
           error: (error) => {
-            this.error =
-              error.error.detail || 'Login failed. Please try again.';
+            if (error.status === 401) {
+              this.error = 'Invalid username or password.';
+            } else if (error.status === 403) {
+              this.error = 'Account is inactive. Please contact support.';
+            } else {
+              this.error =
+                error.error.detail ||
+                'An unexpected error occurred. Please try again.';
+            }
           },
         });
     }

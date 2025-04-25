@@ -4,15 +4,7 @@ import { isPlatformBrowser } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-
-interface User {
-  id: number;
-  username: string;
-  email: string;
-  bio: string;
-  avatar: string | null;
-  is_online: boolean;
-}
+import { User } from '../../models/user.model';
 
 @Component({
   selector: 'app-settings',
@@ -22,6 +14,9 @@ interface User {
   styleUrls: ['./settings.component.css'],
 })
 export class SettingsComponent implements OnInit {
+  private apiUrl = 'http://localhost:8000/api';
+  private baseUrl = 'http://localhost:8000';
+
   constructor(
     private router: Router,
     @Inject(PLATFORM_ID) private platformId: Object,
@@ -33,12 +28,13 @@ export class SettingsComponent implements OnInit {
     username: '',
     email: '',
     bio: '',
-    avatar: null,
+    avatar: undefined,
     is_online: false,
   };
 
   selectedAvatarFile: File | null = null;
   avatarPreview: string | null = null;
+  avatarUrl: string = 'assets/default-avatar.png';
 
   isLoading: boolean = false;
   errorMessage: string = '';
@@ -66,25 +62,47 @@ export class SettingsComponent implements OnInit {
       Authorization: `Bearer ${token}`,
     });
 
-    this.http
-      .get<User>('http://127.0.0.1:8000/api/users/me/', { headers })
-      .subscribe({
-        next: (data) => {
-          if (data) {
-            this.user = data;
-            // Ensure the avatar URL is correctly processed
-            if (this.user.avatar && !this.user.avatar.startsWith('http')) {
-              this.user.avatar = 'http://127.0.0.1:8000' + this.user.avatar;
-              console.log('the avatar is : ' + this.user.avatar);
-            }
-            console.log('User profile loaded with avatar:', data);
-          }
-        },
-        error: (err) => {
-          console.error('Error loading user profile:', err);
-          this.errorMessage = 'Failed to load user profile';
-        },
-      });
+    this.http.get<User>(`${this.apiUrl}/users/me/`, { headers }).subscribe({
+      next: (data: User) => {
+        if (data) {
+          this.user = data;
+          console.log('User profile loaded:', data);
+          this.processAvatarUrl();
+        }
+      },
+      error: (err: any) => {
+        console.error('Error loading user profile:', err);
+        this.errorMessage = 'Failed to load user profile';
+      },
+    });
+  }
+
+  processAvatarUrl(): void {
+    if (this.user.avatar_url) {
+      this.avatarUrl = this.user.avatar_url;
+      console.log('Using avatar_url:', this.avatarUrl);
+      return;
+    }
+
+    // If no avatar_url, fall back to avatar path processing
+    if (!this.user.avatar) {
+      this.avatarUrl = 'assets/default-avatar.png';
+      console.log('No avatar, using default:', this.avatarUrl);
+      return;
+    }
+
+    // If avatar is a relative path, make it absolute
+    if (this.user.avatar.startsWith('/')) {
+      this.avatarUrl = `${this.baseUrl}${this.user.avatar}`;
+    } else if (this.user.avatar.startsWith('http')) {
+      // If it's already a full URL, use it as is
+      this.avatarUrl = this.user.avatar;
+    } else {
+      // Otherwise, assume it's a relative path without a leading slash
+      this.avatarUrl = `${this.baseUrl}/media/${this.user.avatar}`;
+    }
+
+    console.log('Processed avatar URL:', this.avatarUrl);
   }
 
   onFileSelected(event: any): void {
@@ -113,10 +131,9 @@ export class SettingsComponent implements OnInit {
     const formData = new FormData();
     formData.append('username', this.user.username);
     formData.append('email', this.user.email);
-    formData.append('bio', this.user.bio);
-    formData.append('is_online', String(this.user.is_online));
+    formData.append('bio', this.user.bio || '');
 
-    // If there's a selected avatar, append it to formData
+    // Only add avatar if a new one is selected
     if (this.selectedAvatarFile) {
       formData.append('avatar', this.selectedAvatarFile);
     }
@@ -125,30 +142,95 @@ export class SettingsComponent implements OnInit {
     this.errorMessage = '';
     this.successMessage = '';
 
-    console.log('Sending data to the backend:', formData);
+    // Use a dedicated endpoint for avatar upload if the user is just changing their avatar
+    if (this.selectedAvatarFile && !this.hasProfileDataChanged()) {
+      this.http
+        .post<any>(
+          `${this.apiUrl}/users/${this.user.id}/upload_avatar/`,
+          formData,
+          {
+            headers: new HttpHeaders({
+              Authorization: `Bearer ${token}`,
+            }),
+          }
+        )
+        .subscribe({
+          next: (response) => {
+            console.log('Avatar updated successfully:', response);
+            this.successMessage = 'Avatar updated successfully';
+            this.isLoading = false;
 
-    this.http
-      .put<User>(`http://127.0.0.1:8000/api/users/${this.user.id}/`, formData, {
-        headers,
-      })
-      .subscribe({
-        next: (updatedUser) => {
-          // Log the response from the backend to inspect the updated user data
-          console.log('Backend response:', updatedUser);
+            // Update avatar URL and clear selected file
+            if (response.avatar) {
+              this.avatarUrl = response.avatar;
+              // Store it in the user object too
+              this.user.avatar = response.avatar;
+              this.user.avatar_url = response.avatar;
+            }
+            this.selectedAvatarFile = null;
+            this.avatarPreview = null;
 
-          this.successMessage = 'Profile updated successfully';
-          this.user = updatedUser; // The updated user will have the correct avatar URL
-          this.selectedAvatarFile = null;
-          this.avatarPreview = null;
-          this.isLoading = false;
-          this.loadUserProfile(); // Load the user profile to get the updated avatar
-        },
-        error: (err) => {
-          this.errorMessage = 'Failed to update profile';
-          console.error('Error updating profile:', err);
-          this.isLoading = false;
-        },
-      });
+            // Clear avatar cache in UserService to force refresh in chat
+            this.clearAvatarCacheInStorage();
+          },
+          error: (err) => {
+            console.error('Error updating avatar:', err);
+            this.errorMessage = 'Failed to update avatar';
+            this.isLoading = false;
+          },
+        });
+    } else {
+      // Update the entire profile
+      this.http
+        .patch<User>(`${this.apiUrl}/users/${this.user.id}/`, formData, {
+          headers,
+        })
+        .subscribe({
+          next: (updatedUser: User) => {
+            console.log('Profile updated successfully:', updatedUser);
+            this.successMessage = 'Profile updated successfully';
+
+            // Important: Preserve existing avatar URL if none returned in response
+            if (
+              !updatedUser.avatar_url &&
+              this.avatarUrl &&
+              this.avatarUrl !== 'assets/default-avatar.png'
+            ) {
+              updatedUser.avatar_url = this.avatarUrl;
+            }
+
+            this.user = updatedUser;
+            this.processAvatarUrl();
+            this.selectedAvatarFile = null;
+            this.avatarPreview = null;
+            this.isLoading = false;
+
+            // Clear avatar cache in UserService to force refresh in chat
+            this.clearAvatarCacheInStorage();
+          },
+          error: (err: any) => {
+            this.errorMessage = 'Failed to update profile';
+            console.error('Error updating profile:', err);
+            this.isLoading = false;
+          },
+        });
+    }
+  }
+
+  // Helper method to check if non-avatar profile data has changed
+  private hasProfileDataChanged(): boolean {
+    // We'd need to compare with original data from server
+    // For simplicity, assuming any edit was made
+    return true;
+  }
+
+  // Helper to clear avatar cache
+  private clearAvatarCacheInStorage(): void {
+    // Add this to force other components to reload the avatar
+    const userId = localStorage.getItem('user_id');
+    if (userId) {
+      localStorage.setItem('avatar_cache_invalidated', Date.now().toString());
+    }
   }
 
   deleteAccount(): void {
@@ -174,16 +256,17 @@ export class SettingsComponent implements OnInit {
     this.errorMessage = '';
 
     this.http
-      .delete(`http://127.0.0.1:8000/api/users/${this.user.id}/`, { headers })
+      .delete(`${this.apiUrl}/users/${this.user.id}/`, { headers })
       .subscribe({
         next: () => {
           this.successMessage = 'Account deleted successfully';
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
+          localStorage.removeItem('user_id');
           this.isLoading = false;
           this.router.navigate(['/login']);
         },
-        error: (err) => {
+        error: (err: any) => {
           this.errorMessage = 'Failed to delete account';
           console.error('Error deleting account:', err);
           this.isLoading = false;
@@ -194,6 +277,7 @@ export class SettingsComponent implements OnInit {
   logOut(): void {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user_id');
     this.router.navigate(['/login']);
   }
 }

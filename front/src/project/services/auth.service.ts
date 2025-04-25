@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, tap } from 'rxjs';
 import {
   RegisterRequest,
   LoginRequest,
@@ -21,12 +21,42 @@ export class AuthService {
   }
 
   login(data: LoginRequest): Observable<AuthResponse> {
-    return this.http.post<AuthResponse>(`${this.apiUrl}/auth/login/`, data);
+    return this.http.post<AuthResponse>(`${this.apiUrl}/auth/login/`, data).pipe(
+      tap(response => {
+        // Get user ID from token (JWT)
+        if (response.access) {
+          const tokenParts = response.access.split('.');
+          if (tokenParts.length === 3) {
+            try {
+              const payload = JSON.parse(atob(tokenParts[1]));
+              if (payload.user_id) {
+                localStorage.setItem('user_id', payload.user_id.toString());
+              }
+            } catch (e) {
+              console.error('Error parsing JWT token', e);
+            }
+          }
+        }
+      })
+    );
   }
 
   setTokens(access: string, refresh: string): void {
     localStorage.setItem('access_token', access);
     localStorage.setItem('refresh_token', refresh);
+    
+    // Extract user_id from the JWT token
+    const tokenParts = access.split('.');
+    if (tokenParts.length === 3) {
+      try {
+        const payload = JSON.parse(atob(tokenParts[1]));
+        if (payload.user_id) {
+          localStorage.setItem('user_id', payload.user_id.toString());
+        }
+      } catch (e) {
+        console.error('Error parsing JWT token', e);
+      }
+    }
   }
 
   getAccessToken(): string | null {
@@ -36,10 +66,16 @@ export class AuthService {
   getRefreshToken(): string | null {
     return localStorage.getItem('refresh_token');
   }
+  
+  getUserId(): number | null {
+    const userId = localStorage.getItem('user_id');
+    return userId ? parseInt(userId) : null;
+  }
 
   logout(): void {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user_id');
   }
 
   isAuthenticated(): boolean {

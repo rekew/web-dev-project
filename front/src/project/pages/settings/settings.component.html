@@ -10,10 +10,12 @@
 
       <div class="avatar-section">
         <label class="avatar-container">
+          <!-- Используем avatarPreview при выборе нового файла, иначе используем обработанный avatarUrl -->
           <img
-            [src]="avatarPreview || user.avatar || 'assets/default-avatar.png'"
+            [src]="avatarPreview || avatarUrl"
             alt="Profile picture"
             class="avatar-image"
+            (error)="this.avatarUrl = 'assets/default-avatar.png'"
           />
           <div class="avatar-overlay">
             <i class="fas fa-camera upload-label"></i>

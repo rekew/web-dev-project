@@ -15,46 +15,101 @@
 <div class="messenger-container">
   <div class="sidebar" [class.active]="isSidebarOpen">
     <div class="search-group">
-      <input type="text" placeholder="Поиск групп..." class="search-input" />
+      <input 
+        type="text" 
+        placeholder="Search chats..." 
+        class="search-input" 
+        [(ngModel)]="searchChat"
+      />
     </div>
-    <button class="create-group-btn">+ Создать новую группу</button>
+    <button class="create-group-btn" (click)="createNewChat()">+ Create New Chat</button>
+    
     <div class="group-list">
-      <div class="group-item">
-        <div class="group-avatar">АБ</div>
+      <div 
+        *ngFor="let chat of filteredChats()" 
+        class="group-item" 
+        [class.active]="selectedChat?.id === chat.id"
+        (click)="selectChat(chat)"
+      >
+        <!-- Updated avatar display -->
+        <div *ngIf="getChatAvatar(chat) as avatarUrl; else defaultAvatar" class="group-avatar-img">
+          <img [src]="avatarUrl" (error)="onAvatarError($event, chat)" alt="Avatar" 
+               style="width: 40px; height: 40px; object-fit: cover; border-radius: 50%;">
+        </div>
+        <ng-template #defaultAvatar>
+          <div class="group-avatar">{{ getInitials(getChatNameFromParticipants(chat)) }}</div>
+        </ng-template>
+        
         <div class="group-info">
-          <div class="group-name">Название группы</div>
-          <div class="last-message">Последнее сообщение...</div>
+          <div class="group-name">{{ chat.name || getChatNameFromParticipants(chat) }}</div>
+          <div class="last-message">
+            {{ chat.last_message?.text || 'No messages yet' }}
+          </div>
+        </div>
+        <div class="status-indicator" 
+             *ngIf="!chat.is_group" 
+             [class.online]="isChatParticipantOnline(chat)">
         </div>
       </div>
-      <div class="group-item">
-        <div class="group-avatar">ВГ</div>
-        <div class="group-info">
-          <div class="group-name">Название группы</div>
-          <div class="last-message">Последнее сообщение...</div>
-        </div>
+      
+      <div *ngIf="chats.length === 0" class="no-chats">
+        No chats available. Create a new one!
       </div>
     </div>
   </div>
+  
   <div class="chat-container" [class.sidebar-active]="isSidebarOpen">
-    <div class="chat-header">
-      <div class="chat-title">Название группы</div>
-      <div class="chat-participants">n-участников</div>
-    </div>
-    <div class="chat-messages">
-      <div class="message left">
-        <div class="message-text">Всем привет!</div>
-        <div class="message-time">13:54</div>
+    <div *ngIf="selectedChat" class="chat-header">
+      <div class="chat-title">
+        <!-- Updated avatar in chat header -->
+        <div *ngIf="getChatAvatar(selectedChat) as avatarUrl; else headerDefaultAvatar" class="header-avatar-img">
+          <img [src]="avatarUrl" (error)="onAvatarError($event, selectedChat)" alt="Avatar"
+               style="width: 35px; height: 35px; object-fit: cover; border-radius: 50%;">
+        </div>
+        <ng-template #headerDefaultAvatar>
+          <div class="header-avatar">{{ getInitials(getChatNameFromParticipants(selectedChat)) }}</div>
+        </ng-template>
+        
+        {{ selectedChat.name || getChatNameFromParticipants(selectedChat) }}
+        <span class="online-status" *ngIf="!selectedChat.is_group && isChatParticipantOnline(selectedChat)">
+          online
+        </span>
       </div>
-      <div class="message right">
-        <div class="message-text">Привет!</div>
-        <div class="message-time">14:12</div>
+      <div class="chat-participants">
+        {{ selectedChat.is_group ? selectedChat.participants.length + ' participants' : '' }}
       </div>
     </div>
-    <div class="message-input">
-      <textarea placeholder="Введите сообщение..." class="input-field">
-      </textarea>
+    
+    <div *ngIf="!selectedChat" class="no-chat-selected">
+      <div class="empty-state">
+        <p>Select a chat or create a new one</p>
+      </div>
+    </div>
+    
+    <div *ngIf="selectedChat" class="chat-messages">
+      <div *ngFor="let message of messages" 
+        class="message" 
+        [class.right]="isCurrentUserMessage(message.sender)" 
+        [class.left]="!isCurrentUserMessage(message.sender)"
+      >
+        <div class="message-text">{{ message.text }}</div>
+        <div class="message-time">{{ formatTime(message.sent_at) }}</div>
+      </div>
+      
+      <div *ngIf="messages.length === 0" class="no-messages">
+        No messages yet. Start the conversation!
+      </div>
+    </div>
+    
+    <div *ngIf="selectedChat" class="message-input">
+      <textarea 
+        placeholder="Type your message..." 
+        class="input-field"
+        [(ngModel)]="newMessage"
+        (keyup.enter)="sendMessage()"
+      ></textarea>
 
-      <button class="send-btn">
+      <button class="send-btn" (click)="sendMessage()">
         <div class="svg-wrapper-1">
           <div class="svg-wrapper">
             <svg
@@ -76,3 +131,14 @@
     </div>
   </div>
 </div>
+
+<div *ngIf="!isSocketConnected" class="connection-status">
+  <div class="status-indicator offline"></div>
+  Offline Mode
+</div>
+
+<app-create-chat 
+  *ngIf="showCreateChatModal"
+  (chatCreated)="onChatCreated($event)"
+  (cancelled)="hideCreateChatModal()"
+></app-create-chat>

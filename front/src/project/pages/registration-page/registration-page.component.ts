@@ -51,10 +51,19 @@ export class RegistrationPageComponent implements OnInit {
             this.router.navigate(['/login']);
           },
           error: (error) => {
-            this.error =
-              error.error.detail || 'Registration failed. Please try again.';
+            if (error.status === 400) {
+              this.error =
+                'Invalid input. Please check your details and try again.';
+            } else if (error.status === 409) {
+              this.error = 'Username or email already exists.';
+            } else {
+              this.error =
+                'An unexpected error occurred. Please try again later.';
+            }
           },
         });
+    } else if (this.password !== this.confirmPassword) {
+      this.error = 'Passwords do not match.';
     }
   }
 
